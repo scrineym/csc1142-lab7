@@ -83,8 +83,15 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# dbt project - ignore everything except touch.txt
+# dbt project - ignore everything except touch.txt and .dbtignore
 dbt_projects/csc1142lab7/*
+!dbt_projects/csc1142lab7/.dbtignore
 !dbt_projects/csc1142lab7/models/
 dbt_projects/csc1142lab7/models/*
 !dbt_projects/csc1142lab7/models/touch.txt
+!dbt_projects/csc1142lab7/models/staging/
+dbt_projects/csc1142lab7/models/staging/*
+!dbt_projects/csc1142lab7/models/staging/touch.txt
+!dbt_projects/csc1142lab7/models/marts/
+dbt_projects/csc1142lab7/models/marts/*
+!dbt_projects/csc1142lab7/models/marts/touch.txt

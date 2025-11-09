@@ -1,0 +1,14 @@
+version: 2
+
+models:
+  - name: stg_customers
+    description: "Cleaned customer data"
+    columns:
+      - name: customer_id
+        description: "Unique customer ID"
+        tests:
+          - unique
+          - not_null
+      - name: country
+        tests:
+          - not_null

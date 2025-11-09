@@ -545,20 +545,14 @@ This creates documentation files in the `target/` directory, including:
 
 ### Step 2: Serve the documentation
 
-Start the documentation web server:
+Start the documentation web server in the background:
 
 ```bash
 cd ~/dbt_projects/csc1142lab7
-dbt docs serve --port 8080
+nohup dbt docs serve --host 0.0.0.0 --port 8080 > /dev/null 2>&1 &
 ```
 
-**Expected output:**
-```
-Serving docs at 0.0.0.0:8080
-To access from your system, navigate to http://localhost:8080
-```
-
-**Important:** The server will keep running in your terminal. Don't close this terminal window!
+This starts the server in the background so you can continue using your terminal. The server will keep running until you stop it or restart the container.
 
 ### Step 3: View the documentation
 
@@ -593,12 +587,22 @@ Click on `fct_orders` in the graph to see:
 
 ### Step 4: Stop the documentation server
 
-When you're done viewing the docs, go back to the terminal and press:
-```
-Ctrl + C
+When you're done viewing the docs, you can stop the server:
+
+```bash
+# Find the process ID
+ps aux | grep "dbt docs serve"
+
+# Kill the process (replace <PID> with the actual process ID)
+kill <PID>
 ```
 
-This will stop the documentation server.
+Or to kill all dbt docs servers:
+```bash
+pkill -f "dbt docs serve"
+```
+
+The server will also automatically stop when you restart the Docker container.
 
 ### Understanding dbt Documentation
 
@@ -615,6 +619,378 @@ This makes it easy for analysts and stakeholders to understand:
 - Where it comes from
 - How it's transformed
 - What each column means
+
+## Understanding Materialization: Tables vs Views
+
+By default, all your dbt models are materialized as **views** (as configured in `dbt_project.yml`). Views are virtual tables that run the SQL query every time they're queried. For frequently accessed or complex models, you may want to materialize them as **tables** instead.
+
+### Step 1: Update fct_orders to use table materialization
+
+Open your `fct_orders.sql` file in the `dbt_projects/csc1142lab7/models/` directory and add this configuration at the very top of the file:
+
+```sql
+{{ config(materialized='table') }}
+
+SELECT
+    o.OrderID as order_id,
+    o.OrderDate as order_date,
+    o.CustomerID as customer_id,
+    c.company_name,
+    c.country,
+    o.Freight as freight_cost
+FROM {{ source('northwind', 'Orders') }} o
+LEFT JOIN {{ ref('stg_customers') }} c
+    ON o.CustomerID = c.customer_id
+```
+
+The `{{ config(materialized='table') }}` line tells dbt to create a physical table instead of a view.
+
+### Step 2: Run the model with table materialization
+
+```bash
+cd ~/dbt_projects/csc1142lab7
+dbt run --select fct_orders
+```
+
+**Expected output:**
+```
+Running with dbt=1.x.x
+Found 3 models, 0 tests, 0 snapshots, 0 analyses, 0 macros, 0 operations, 7 sources
+
+Completed successfully
+Done. PASS=1 ERROR=0 SKIP=0 TOTAL=1
+```
+
+Notice in the logs that dbt will now:
+1. Drop the existing view (if it exists)
+2. Create a physical table instead
+3. Insert the data into the table
+
+### Step 3: Verify the table was created
+
+You can verify that `fct_orders` is now a table (not a view) by querying SQL Server:
+
+```bash
+docker exec -it sqlserver-northwind /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'YourStrong!Passw0rd' -C -d Northwind -Q "SELECT TABLE_NAME, TABLE_TYPE FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'fct_orders'"
+```
+
+**Expected output:**
+```
+TABLE_NAME    TABLE_TYPE
+fct_orders    BASE TABLE
+```
+
+If it were still a view, it would show `VIEW` instead of `BASE TABLE`.
+
+### Understanding Materialization Types
+
+dbt supports several materialization strategies:
+
+1. **View** (default)
+   - Creates a virtual table
+   - Query runs every time the view is queried
+   - **Pros**: Always up-to-date, no storage overhead
+   - **Cons**: Can be slow for complex queries
+   - **Best for**: Simple transformations, infrequently queried models
+
+2. **Table**
+   - Creates a physical table with data stored on disk
+   - Query runs once during `dbt run`, results are stored
+   - **Pros**: Fast query performance
+   - **Cons**: Takes up storage, can become stale
+   - **Best for**: Complex transformations, frequently queried models, fact tables
+
+3. **Incremental** (not covered in this lab)
+   - Only processes new/changed data
+   - **Best for**: Very large datasets, append-only data
+
+4. **Ephemeral** (not covered in this lab)
+   - No database object created, only used in CTEs
+   - **Best for**: Intermediate transformations
+
+### When to Use Tables vs Views
+
+**Use tables for:**
+- Fact tables with complex joins or aggregations
+- Models queried frequently by end users
+- Models with expensive computations
+- Final models in your DAG
+
+**Use views for:**
+- Staging models (simple transformations)
+- Models that need to always reflect current data
+- Intermediate models only used by other dbt models
+- When storage is a concern
+
+### Performance Comparison
+
+Try querying both models to see the performance difference:
+
+```bash
+# Query the view (stg_customers)
+docker exec -it sqlserver-northwind /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'YourStrong!Passw0rd' -C -d Northwind -Q "SELECT COUNT(*) FROM dbo.stg_customers"
+
+# Query the table (fct_orders)
+docker exec -it sqlserver-northwind /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'YourStrong!Passw0rd' -C -d Northwind -Q "SELECT COUNT(*) FROM dbo.fct_orders"
+```
+
+For simple models like these, the difference may be negligible. But for complex models with multiple joins and aggregations, tables can be significantly faster.
+
+## Create a Data Mart for Analytics
+
+Data marts are the final layer in your dbt project - they're business-specific datasets designed for end users and BI tools. They often contain aggregations, metrics, and derived calculations that answer specific business questions.
+
+In this step, you'll create a customer summary mart that aggregates order information by customer.
+
+### Step 1: Create the customer summary mart
+
+Using the JupyterLab file browser:
+1. Navigate to the `lab_files/models/marts/` directory
+2. Open and examine the `customer_summary.sql` file
+3. Notice how it:
+   - Uses `{{ config(materialized='table') }}` because it's a final output table
+   - References `{{ ref('fct_orders') }}` - building on top of your fact table
+   - Aggregates data using GROUP BY to create customer-level metrics
+   - Calculates useful business metrics: total orders, freight costs, date ranges
+4. Copy the entire contents of the file
+5. In your `dbt_projects/csc1142lab7/models/` directory, create a new folder called `marts`
+6. Inside the `marts` folder, create a new file called `customer_summary.sql`
+7. Paste the contents into the new file and save it
+
+### Step 2: Run the data mart
+
+```bash
+cd ~/dbt_projects/csc1142lab7
+dbt run --select customer_summary
+```
+
+**Expected output:**
+```
+Running with dbt=1.x.x
+Found 4 models, 0 tests, 0 snapshots, 0 analyses, 0 macros, 0 operations, 7 sources
+
+Completed successfully
+Done. PASS=1 ERROR=0 SKIP=0 TOTAL=1
+```
+
+dbt will automatically build the entire dependency chain:
+1. `stg_customers` (if not already built)
+2. `fct_orders` (if not already built)
+3. `customer_summary` (the new mart)
+
+### Step 3: Query the customer summary
+
+Let's see the results:
+
+```bash
+docker exec -it sqlserver-northwind /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'YourStrong!Passw0rd' -C -d Northwind -Q "SELECT TOP 10 * FROM dbo.customer_summary ORDER BY total_orders DESC"
+```
+
+This shows the top 10 customers by number of orders, with all their aggregated metrics.
+
+### Step 4: View the complete lineage
+
+Now you can see the full data pipeline:
+
+```bash
+cd ~/dbt_projects/csc1142lab7
+dbt ls --select +customer_summary
+```
+
+**Expected output:**
+```
+model.csc1142lab7.stg_customers
+model.csc1142lab7.fct_orders
+model.csc1142lab7.customer_summary
+```
+
+This shows the complete dependency chain from source → staging → fact → mart.
+
+You can also visualize this in the dbt docs. If you still have the docs server running, refresh your browser and click on the lineage graph to see how `customer_summary` connects to the entire pipeline.
+
+### Understanding Data Marts
+
+Your `customer_summary` mart demonstrates several key concepts:
+
+1. **Aggregation Layer**: Transforms row-level data into summary metrics
+2. **Business Logic**: Encodes business rules (e.g., what makes a "customer summary")
+3. **Performance**: Pre-aggregated data for fast BI tool queries
+4. **Dependency Chain**: Builds on top of `fct_orders`, which builds on `stg_customers`
+5. **Materialization**: Always a table for fast query performance
+
+### Typical dbt Project Structure
+
+Your project now follows a common dbt pattern:
+
+```
+models/
+├── sources.yml           # Raw data definitions
+├── stg_customers.sql     # Staging: Light transformations
+├── fct_orders.sql        # Fact: Business events with joins
+└── marts/
+    └── customer_summary.sql  # Mart: Aggregated metrics for analytics
+```
+
+This layered approach (staging → facts → marts) is a best practice because:
+- **Staging**: Standardizes raw data
+- **Facts**: Joins and combines data
+- **Marts**: Aggregates for specific use cases
+- Each layer builds on the previous one
+- Changes ripple through the dependency graph automatically
+
+### Business Use Cases for Data Marts
+
+The `customer_summary` mart can answer questions like:
+- Which customers order most frequently?
+- What's the average shipping cost per customer?
+- Who are our newest vs. oldest customers?
+- Which countries have the highest freight costs?
+
+BI tools (like Tableau, Power BI, Looker) would typically connect directly to this mart rather than the raw tables or staging models.
+
+## Add Data Quality Tests
+
+Data quality testing is crucial for ensuring your transformations produce reliable data. dbt makes it easy to add tests directly in your YAML schema files.
+
+In this step, you'll add tests to ensure data quality in your staging models.
+
+### Step 1: Create the staging schema file
+
+Using the JupyterLab file browser:
+1. Navigate to the `lab_files/models/staging/` directory
+2. Open and examine the `schema.yml` file
+3. Notice how it defines:
+   - Model name (`stg_customers`)
+   - Column descriptions
+   - Tests on specific columns:
+     - `unique` - ensures no duplicate values
+     - `not_null` - ensures no NULL values
+4. Copy the entire contents of the file
+5. In your `dbt_projects/csc1142lab7/models/` directory, create a new folder called `staging`
+6. Inside the `staging` folder, create a new file called `schema.yml`
+7. Paste the contents into the new file and save it
+
+### Step 2: Move stg_customers to the staging folder
+
+For better organization, move your `stg_customers.sql` file into the `staging` folder:
+
+1. In JupyterLab file browser, locate `dbt_projects/csc1142lab7/models/stg_customers.sql`
+2. Drag and drop it into the `staging` folder (or cut and paste)
+3. Your file should now be at `dbt_projects/csc1142lab7/models/staging/stg_customers.sql`
+
+### Step 3: Run the tests
+
+Now run dbt tests to validate your data:
+
+```bash
+cd ~/dbt_projects/csc1142lab7
+dbt test
+```
+
+**Expected output:**
+```
+Running with dbt=1.x.x
+Found 4 models, 3 tests, 0 snapshots, 0 analyses, 0 macros, 0 operations, 7 sources
+
+Running tests...
+Completed successfully
+Done. PASS=3 ERROR=0 SKIP=0 TOTAL=3
+```
+
+This runs all 3 tests:
+1. `customer_id` is unique
+2. `customer_id` is not null
+3. `country` is not null
+
+### Step 4: Run tests for a specific model
+
+You can run tests for just one model:
+
+```bash
+cd ~/dbt_projects/csc1142lab7
+dbt test --select stg_customers
+```
+
+### Step 5: View test results in detail
+
+To see more details about what tests are running:
+
+```bash
+cd ~/dbt_projects/csc1142lab7
+dbt test --select stg_customers --verbose
+```
+
+### Step 6: Run both build and test together
+
+You can run models and tests in one command:
+
+```bash
+cd ~/dbt_projects/csc1142lab7
+dbt build
+```
+
+This command:
+1. Runs all models in dependency order
+2. Runs all tests after each model is built
+3. Shows a comprehensive summary
+
+**Expected output:**
+```
+Running with dbt=1.x.x
+Found 4 models, 3 tests, 0 snapshots, 0 analyses, 0 macros, 0 operations, 7 sources
+
+Building models...
+Testing models...
+
+Completed successfully
+Done. PASS=7 ERROR=0 SKIP=0 TOTAL=7
+```
+
+(4 models built + 3 tests passed = 7 total)
+
+### Understanding dbt Tests
+
+dbt provides several built-in tests:
+
+1. **unique** - Ensures column values are unique (no duplicates)
+2. **not_null** - Ensures column has no NULL values
+3. **accepted_values** - Ensures column only contains specific values
+4. **relationships** - Ensures referential integrity between tables
+
+### Adding More Tests
+
+You can add tests to other models too. For example, add this to your `schema.yml`:
+
+```yaml
+  - name: fct_orders
+    description: "Order facts with customer information"
+    columns:
+      - name: order_id
+        description: "Unique order identifier"
+        tests:
+          - unique
+          - not_null
+      - name: customer_id
+        description: "Customer who placed the order"
+        tests:
+          - not_null
+```
+
+Then run `dbt test` again to see the new tests execute.
+
+### Why Data Testing Matters
+
+Data quality tests help you:
+- **Catch issues early**: Find data problems before they reach production
+- **Document assumptions**: Tests make your data quality expectations explicit
+- **Prevent regressions**: Tests fail if your transformations break
+- **Build trust**: Stakeholders can trust data that's been tested
+- **Debug faster**: Failed tests pinpoint exactly what's wrong
+
+In production dbt projects, tests are typically run:
+- After every `dbt run` in CI/CD pipelines
+- On a schedule to monitor data quality
+- Before promoting changes to production
 
 ## Notes
 
