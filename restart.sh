@@ -18,7 +18,7 @@ docker compose down -v
 
 # Reset all git changes
 git reset --hard
-git clean -fd
+git clean -fdx
 
 # Rebuild and restart
 docker compose build --no-cache
