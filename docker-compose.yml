@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  sqlserver-northwind:
+    build:
+      context: .
+      dockerfile: Dockerfile.sqlserver
+    container_name: sqlserver-northwind
+    environment:
+      - ACCEPT_EULA=Y
+      - SA_PASSWORD=YourStrong!Passw0rd
+      - MSSQL_PID=Developer
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+    networks:
+      - dbt-network
+    restart: unless-stopped
+
+  jupyter-dbt:
+    build:
+      context: .
+      dockerfile: Dockerfile.jupyter
+    container_name: jupyter-dbt
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./notebooks:/home/jovyan/notebooks
+      - ./dbt_projects:/home/jovyan/dbt_projects
+    networks:
+      - dbt-network
+    depends_on:
+      - sqlserver-northwind
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+    command: start-notebook.sh --NotebookApp.token='' --NotebookApp.password=''
+    restart: unless-stopped
+
+volumes:
+  sqlserver-data:
+
+networks:
+  dbt-network:
+    driver: bridge

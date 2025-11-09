@@ -1,0 +1,27 @@
+# Use the official Microsoft SQL Server image
+FROM mcr.microsoft.com/mssql/server:2022-latest
+
+# Switch to root to install utilities and copy files
+USER root
+
+# Create a directory for our SQL scripts
+RUN mkdir -p /usr/src/app
+WORKDIR /usr/src/app
+
+# Copy the SQL scripts into the container
+COPY ./sql-scripts/ /usr/src/app/
+
+# Copy the initialization script
+COPY ./entrypoint.sh /usr/src/app/
+
+# Grant permissions
+RUN chmod +x /usr/src/app/entrypoint.sh
+
+# Switch back to mssql user
+USER mssql
+
+# Expose SQL Server port
+EXPOSE 1433
+
+# Run the entrypoint script
+CMD ["/bin/bash", "/usr/src/app/entrypoint.sh"]

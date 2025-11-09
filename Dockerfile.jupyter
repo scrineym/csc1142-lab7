@@ -1,0 +1,47 @@
+# Use official Jupyter base image
+FROM jupyter/base-notebook:latest
+
+# Switch to root to install system dependencies
+USER root
+
+# Install ODBC drivers and dependencies for SQL Server
+RUN apt-get update && \
+    apt-get install -y curl gnupg2 apt-transport-https git && \
+    curl https://packages.microsoft.com/keys/microsoft.asc | apt-key add - && \
+    curl https://packages.microsoft.com/config/ubuntu/22.04/prod.list > /etc/apt/sources.list.d/mssql-release.list && \
+    apt-get update && \
+    ACCEPT_EULA=Y apt-get install -y msodbcsql18 unixodbc-dev && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Switch back to jovyan user (default Jupyter user)
+USER ${NB_UID}
+
+# Upgrade JupyterLab and install Python packages
+RUN pip install --no-cache-dir --upgrade \
+    jupyterlab \
+    notebook \
+    dbt-core \
+    dbt-sqlserver \
+    pyodbc \
+    pandas \
+    sqlalchemy \
+    matplotlib \
+    seaborn
+
+# Create .dbt directory for profiles
+RUN mkdir -p /home/jovyan/.dbt
+
+# Configure JupyterLab to show hidden files by default
+RUN mkdir -p /home/jovyan/.jupyter/lab/user-settings/@jupyterlab/filebrowser-extension && \
+    echo '{"showHiddenFiles": true}' > /home/jovyan/.jupyter/lab/user-settings/@jupyterlab/filebrowser-extension/browser.jupyterlab-settings && \
+    echo "c.ContentsManager.allow_hidden = True" > /home/jovyan/.jupyter/jupyter_server_config.py
+
+# Copy pre-configured DBT profiles.yml
+COPY --chown=${NB_UID}:${NB_GID} profiles.yml /home/jovyan/.dbt/profiles.yml
+
+# Set working directory
+WORKDIR /home/jovyan
+
+# Expose JupyterLab port
+EXPOSE 8888

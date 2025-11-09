@@ -1,0 +1,15 @@
+csc1142lab7:
+  target: dev
+  outputs:
+    dev:
+      type: sqlserver
+      driver: 'ODBC Driver 18 for SQL Server'
+      server: sqlserver-northwind
+      port: 1433
+      database: Northwind
+      schema: dbo
+      authentication: sql
+      user: sa
+      password: YourStrong!Passw0rd
+      encrypt: true
+      trust_cert: true
