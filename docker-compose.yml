@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   sqlserver-northwind:
     build:
@@ -25,9 +23,11 @@ services:
     container_name: jupyter-dbt
     ports:
       - "8888:8888"
+      - "8080:8080"
     volumes:
       - ./notebooks:/home/jovyan/notebooks
       - ./dbt_projects:/home/jovyan/dbt_projects
+      - ./lab_files:/home/jovyan/lab_files
     networks:
       - dbt-network
     depends_on:

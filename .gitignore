@@ -1,6 +1,6 @@
 # Claude Code folder
 .claude/
-
+.ipynb_checkpoints/
 venv/
 
 # Hadoop specific
@@ -82,3 +82,9 @@ node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# dbt project - ignore everything except touch.txt
+dbt_projects/csc1142lab7/*
+!dbt_projects/csc1142lab7/models/
+dbt_projects/csc1142lab7/models/*
+!dbt_projects/csc1142lab7/models/touch.txt
