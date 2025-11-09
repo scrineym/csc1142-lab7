@@ -234,16 +234,7 @@ In dbt, sources allow you to define and document the raw tables in your database
 - Lineage tracking
 - A clear reference for your models
 
-### Step 1: Create the models directory
-
-First, create a `models` directory in your dbt project if it doesn't already exist:
-
-```bash
-cd ~/dbt_projects/csc1142lab7
-mkdir -p models
-```
-
-### Step 2: Copy the sources configuration file
+### Step 1: Copy the sources configuration file
 
 We've provided a pre-configured `sources.yml` file that defines all the Northwind tables.
 
@@ -266,7 +257,7 @@ This file defines 7 source tables from the Northwind database:
 
 Take a moment to review the file structure and understand how sources are defined in dbt.
 
-### Step 3: Verify your sources configuration
+### Step 2: Verify your sources configuration
 
 Run the following command to verify that dbt can see your sources:
 
@@ -286,7 +277,7 @@ source:csc1142lab7.northwind.Products
 source:csc1142lab7.northwind.Suppliers
 ```
 
-### Step 4: Test querying a source
+### Step 3: Test querying a source
 
 Now let's test that we can query a source.
 
@@ -753,8 +744,8 @@ Using the JupyterLab file browser:
    - Aggregates data using GROUP BY to create customer-level metrics
    - Calculates useful business metrics: total orders, freight costs, date ranges
 4. Copy the entire contents of the file
-5. In your `dbt_projects/csc1142lab7/models/` directory, create a new folder called `marts`
-6. Inside the `marts` folder, create a new file called `customer_summary.sql`
+5. Navigate to your `dbt_projects/csc1142lab7/models/marts/` directory
+6. Create a new file called `customer_summary.sql`
 7. Paste the contents into the new file and save it
 
 ### Step 2: Run the data mart
@@ -866,8 +857,8 @@ Using the JupyterLab file browser:
      - `unique` - ensures no duplicate values
      - `not_null` - ensures no NULL values
 4. Copy the entire contents of the file
-5. In your `dbt_projects/csc1142lab7/models/` directory, create a new folder called `staging`
-6. Inside the `staging` folder, create a new file called `schema.yml`
+5. Navigate to your `dbt_projects/csc1142lab7/models/staging/` directory
+6. Create a new file called `schema.yml`
 7. Paste the contents into the new file and save it
 
 ### Step 2: Move stg_customers to the staging folder
